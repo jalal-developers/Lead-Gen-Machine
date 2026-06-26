@@ -1,0 +1,14 @@
+# Ignore Node Modules (Heavy Playwright binaries)
+node_modules/
+
+# Ignore all lead data folders and JSON files
+leads/
+leads.json
+needs_redesign.json
+needs_new_website.json
+qualified_leads.json
+audited_leads.json
+
+# Keep package.json and package-lock.json tracked!
+!package.json
+!package-lock.json
