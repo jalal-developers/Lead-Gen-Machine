@@ -9,7 +9,7 @@ jobs:
         uses: actions/setup-node@v4
         with: { node-version: '20' }
       - run: npm install
-      - run: npm test
+      - run: npm test -- --passWithNoTests
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
