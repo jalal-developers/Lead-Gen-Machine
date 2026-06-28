@@ -38,8 +38,8 @@ const fs = require('fs');
       hasMetaDescription: false,
       unoptimizedImages: 0,
       hasSSL: true, 
-      emailsFound: [],      // NEW: Array to store scraped emails
-      socialLinks: [],      // NEW: Array to store scraped social media profiles
+      emailsFound: [],      
+      socialLinks: [],      
       status: "Successfully Scanned",
       flawScore: 0
     };
@@ -53,26 +53,18 @@ const fs = require('fs');
       await page.goto(lead.Website, { waitUntil: 'domcontentloaded', timeout: 45000 });
       await page.waitForTimeout(4000); 
 
-      // --- NEW: EXTRACT EMAILS AND SOCIAL LINKS ---
-      const contactData = await page.evaluate(() => {
-        // 1. Regex to find email patterns in the raw text
+      // Extract Website Data
+      const websiteContactData = await page.evaluate(() => {
         const text = document.body.innerText;
         const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
         let emails = text.match(emailRegex) || [];
 
-        // 2. Scan all links on the page for mailto: and social media domains
         const links = Array.from(document.querySelectorAll('a'));
         const socials = [];
 
         links.forEach(a => {
           const href = a.href.toLowerCase();
-          
-          // Check for hidden mailto links
-          if (href.startsWith('mailto:')) {
-            emails.push(href.replace('mailto:', '').split('?')[0]); 
-          }
-          
-          // Check for social profiles
+          if (href.startsWith('mailto:')) emails.push(href.replace('mailto:', '').split('?')[0]); 
           if (href.includes('instagram.com') || href.includes('facebook.com') || 
               href.includes('linkedin.com') || href.includes('twitter.com') || 
               href.includes('x.com') || href.includes('tiktok.com')) {
@@ -80,53 +72,47 @@ const fs = require('fs');
           }
         });
 
-        // Remove duplicates
-        const uniqueEmails = [...new Set(emails)];
-        const uniqueSocials = [...new Set(socials)];
-
-        return { emails: uniqueEmails, socials: uniqueSocials };
+        return { emails, socials };
       });
 
-      auditReport.emailsFound = contactData.emails;
-      auditReport.socialLinks = contactData.socials;
+      // --- NEW: MERGE MAPS DATA WITH WEBSITE DATA AND REMOVE DUPLICATES ---
+      auditReport.emailsFound = [...new Set([...(lead.Emails || []), ...websiteContactData.emails])];
+      auditReport.socialLinks = [...new Set([...(lead.SocialLinks || []), ...websiteContactData.socials])];
 
 
-      // 1. Mobile Responsiveness Check
+      // Mobile Responsiveness Check
       auditReport.isMobileOptimized = false; 
       const viewport = await page.$('meta[name="viewport"]');
       if (viewport) {
         const content = await viewport.getAttribute('content');
-        if (content && content.includes('width=device-width')) {
-            auditReport.isMobileOptimized = true;
-        }
+        if (content && content.includes('width=device-width')) auditReport.isMobileOptimized = true;
       }
 
-      // 2. Tech Stack Detection
+      // Tech Stack Detection
       const htmlCode = await page.content();
       if (htmlCode.includes('wp-content') || htmlCode.includes('wordpress')) auditReport.techStack = 'WordPress';
       else if (htmlCode.includes('cdn.shopify.com') || htmlCode.includes('Shopify')) auditReport.techStack = 'Shopify';
       else if (htmlCode.includes('wix.com')) auditReport.techStack = 'Wix';
       else if (htmlCode.includes('react') || htmlCode.includes('_next')) auditReport.techStack = 'React / Next.js';
 
-      // 3. WhatsApp Integration Check
+      // WhatsApp Integration Check
       if (htmlCode.includes('wa.me') || htmlCode.includes('api.whatsapp.com') || htmlCode.includes('whatsapp')) {
         auditReport.hasWhatsApp = true;
       }
 
-      // 4. Basic SEO Checks
+      // Basic SEO Checks
       const h1Count = await page.locator('h1').count();
       auditReport.hasH1 = h1Count > 0;
-
       const metaDesc = await page.$('meta[name="description"]');
       auditReport.hasMetaDescription = metaDesc !== null;
 
-      // 5. Performance Check
+      // Performance Check
       auditReport.unoptimizedImages = await page.evaluate(() => {
           const imgs = Array.from(document.querySelectorAll('img'));
           return imgs.filter(img => !img.hasAttribute('loading') || img.getAttribute('loading') !== 'lazy').length;
       });
 
-      // --- CALCULATE FLAW SCORE ---
+      // CALCULATE FLAW SCORE
       if (auditReport.isMobileOptimized === false) auditReport.flawScore += 50; 
       if (auditReport.hasWhatsApp === true) auditReport.flawScore += 30; 
       if (auditReport.hasSSL === false) auditReport.flawScore += 40; 
