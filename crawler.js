@@ -1,10 +1,13 @@
-const { chromium } = require('playwright');
+const { chromium } = require('playwright-extra');
+const stealth = require('puppeteer-extra-plugin-stealth')();
+chromium.use(stealth);
+
 const fs = require('fs');
 
 (async () => {
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
-  const searchQuery = process.env.SEARCH_QUERY || "clothing brands in Lahore";
+  const searchQuery = process.env.SEARCH_QUERY || "restaurants in Lahore";
   
   console.log(`Phase 1: Finding businesses for '${searchQuery}'...`);
   await page.goto('https://www.google.com/maps');
@@ -17,6 +20,7 @@ const fs = require('fs');
   const feedSelector = 'div[role="feed"]';
   await page.waitForSelector(feedSelector, { timeout: 60000 });
 
+  // Scroll the main search feed to get initial list
   for (let i = 0; i < 5; i++) {
     await page.evaluate((selector) => {
       const feed = document.querySelector(selector);
@@ -36,18 +40,24 @@ const fs = require('fs');
     const lead = uniqueListings[i];
     try {
       await page.goto(lead.url, { waitUntil: 'domcontentloaded', timeout: 20000 });
-      await page.waitForTimeout(2500);
+      await page.waitForTimeout(3000); 
 
-      // --- NEW: SCROLL DOWN TO TRIGGER "WEB RESULTS" LAZY LOADING ---
-      await page.evaluate(() => {
-        // Google Maps uses div[role="main"] for the scrollable sidebar
-        const scrollablePanel = document.querySelector('div[role="main"]');
-        if (scrollablePanel) {
-            scrollablePanel.scrollBy(0, 4000); // Force scroll to the bottom
+      // Aggressive Foreground scrolling
+      await page.mouse.move(200, 400);
+      await page.mouse.wheel(0, 4000);
+      await page.waitForTimeout(1000);
+      await page.mouse.wheel(0, 4000);
+      await page.waitForTimeout(1000);
+
+      await page.evaluate(async () => {
+        const panes = document.querySelectorAll('.m6QErb');
+        const scrollablePane = Array.from(panes).find(p => p.scrollHeight > p.clientHeight && p.clientHeight > 0);
+        if (scrollablePane) {
+            scrollablePane.scrollTo(0, scrollablePane.scrollHeight);
+            await new Promise(r => setTimeout(r, 1000));
         }
       });
       
-      // Wait for the web results to fetch and render on screen
       await page.waitForTimeout(2000); 
 
       let website = "No Website";
@@ -62,23 +72,27 @@ const fs = require('fs');
         if (ariaLabel) phone = ariaLabel.replace('Phone number: ', '').trim();
       }
 
-      // EXTRACT SOCIALS & EMAILS 
+      // --- DEEP LINK EXTRACTION FROM WEB RESULTS PANE ---
       const mapsContactData = await page.evaluate(() => {
-        const links = Array.from(document.querySelectorAll('a'));
+        const anchors = Array.from(document.querySelectorAll('a'));
         const socials = [];
         const emails = [];
 
-        links.forEach(a => {
-          const href = a.href.toLowerCase();
+        anchors.forEach(a => {
+          const href = a.href ? a.href.toLowerCase() : '';
+          const text = a.innerText ? a.innerText.toLowerCase() : '';
           
-          if (href.includes('instagram.com') || href.includes('facebook.com') || 
-              href.includes('linkedin.com') || href.includes('twitter.com') || 
-              href.includes('x.com') || href.includes('tiktok.com')) {
-            // Prevent grabbing Google's internal share buttons by mistake
-            if(!href.includes('google.com/share')) {
-                socials.push(a.href);
+          const isSocialUrl = href.includes('instagram.com') || href.includes('facebook.com') || 
+                             href.includes('linkedin.com') || href.includes('twitter.com') || 
+                             href.includes('x.com') || href.includes('tiktok.com') ||
+                             text.includes('facebook.com') || text.includes('instagram.com');
+
+          if (isSocialUrl) {
+            if (!href.includes('google.com/share') && !href.includes('search?q=')) {
+                socials.push(a.href || a.innerText);
             }
           }
+
           if (href.startsWith('mailto:')) {
             emails.push(href.replace('mailto:', '').split('?')[0]); 
           }
@@ -90,6 +104,8 @@ const fs = require('fs');
         };
       });
 
+      console.log(`[Lead ${i+1}] ${lead.name} -> Socials Extracted: ${mapsContactData.socials.length}`);
+
       finalLeads.push({ 
           Company: lead.name, 
           Phone: phone, 
@@ -99,7 +115,9 @@ const fs = require('fs');
           MapsLink: lead.url 
       });
       
-    } catch (error) {}
+    } catch (error) {
+        console.log(`⚠️ Optimization skip on lead index: ${i}`);
+    }
   }
 
   fs.writeFileSync('leads.json', JSON.stringify(finalLeads, null, 2));
