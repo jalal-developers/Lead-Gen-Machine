@@ -38,6 +38,18 @@ const fs = require('fs');
       await page.goto(lead.url, { waitUntil: 'domcontentloaded', timeout: 20000 });
       await page.waitForTimeout(2500);
 
+      // --- NEW: SCROLL DOWN TO TRIGGER "WEB RESULTS" LAZY LOADING ---
+      await page.evaluate(() => {
+        // Google Maps uses div[role="main"] for the scrollable sidebar
+        const scrollablePanel = document.querySelector('div[role="main"]');
+        if (scrollablePanel) {
+            scrollablePanel.scrollBy(0, 4000); // Force scroll to the bottom
+        }
+      });
+      
+      // Wait for the web results to fetch and render on screen
+      await page.waitForTimeout(2000); 
+
       let website = "No Website";
       let phone = "No Phone";
 
@@ -50,7 +62,7 @@ const fs = require('fs');
         if (ariaLabel) phone = ariaLabel.replace('Phone number: ', '').trim();
       }
 
-      // --- NEW: EXTRACT SOCIALS & EMAILS DIRECTLY FROM GOOGLE MAPS PANEL ---
+      // EXTRACT SOCIALS & EMAILS 
       const mapsContactData = await page.evaluate(() => {
         const links = Array.from(document.querySelectorAll('a'));
         const socials = [];
@@ -62,7 +74,10 @@ const fs = require('fs');
           if (href.includes('instagram.com') || href.includes('facebook.com') || 
               href.includes('linkedin.com') || href.includes('twitter.com') || 
               href.includes('x.com') || href.includes('tiktok.com')) {
-            socials.push(a.href);
+            // Prevent grabbing Google's internal share buttons by mistake
+            if(!href.includes('google.com/share')) {
+                socials.push(a.href);
+            }
           }
           if (href.startsWith('mailto:')) {
             emails.push(href.replace('mailto:', '').split('?')[0]); 
