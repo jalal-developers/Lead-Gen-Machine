@@ -33,7 +33,7 @@ const fs = require('fs');
     let auditReport = {
       isMobileOptimized: "Unknown", 
       techStack: "Custom/Unknown",
-      hasWhatsApp: false,
+      hasWhatsAppCheckout: false, // UPGRADED: Explicitly checking for eCom checkout
       hasH1: false,
       hasMetaDescription: false,
       unoptimizedImages: 0,
@@ -44,16 +44,37 @@ const fs = require('fs');
       flawScore: 0
     };
 
-    if (urlLower.startsWith('http://')) {
-        auditReport.hasSSL = false;
-    }
-
     try {
       await page.waitForTimeout(Math.floor(Math.random() * 2000) + 1000); 
       await page.goto(lead.Website, { waitUntil: 'domcontentloaded', timeout: 45000 });
       await page.waitForTimeout(4000); 
 
-      // Extract Website Data
+      // --- FIXED: SSL CHECK VIA FINAL DESTINATION PROTOCOL ---
+      // Instead of reading the raw text link, we check where the browser actually landed
+      const finalDestinationUrl = page.url().toLowerCase();
+      if (finalDestinationUrl.startsWith('https://')) {
+          auditReport.hasSSL = true;
+      } else {
+          auditReport.hasSSL = false; // Truly insecure if it stayed on http://
+      }
+
+      // --- UPGRADED: TARGETED WHATSAPP CHECKOUT DETECTION ---
+      auditReport.hasWhatsAppCheckout = await page.evaluate(() => {
+        const actionableElements = Array.from(document.querySelectorAll('a, button, form, span'));
+        const checkoutKeywords = ['order', 'buy', 'checkout', 'cart', 'خرید', 'آرڈر'];
+        
+        return actionableElements.some(el => {
+          const text = (el.innerText || el.textContent || '').toLowerCase();
+          const href = el.href ? el.href.toLowerCase() : '';
+          
+          const connectsToWhatsapp = href.includes('wa.me') || href.includes('api.whatsapp.com') || text.includes('whatsapp');
+          const intentIsCheckout = checkoutKeywords.some(keyword => text.includes(keyword));
+          
+          return connectsToWhatsapp && intentIsCheckout;
+        });
+      });
+
+      // Extract Contact Data
       const websiteContactData = await page.evaluate(() => {
         const text = document.body.innerText;
         const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
@@ -75,10 +96,8 @@ const fs = require('fs');
         return { emails, socials };
       });
 
-      // --- NEW: MERGE MAPS DATA WITH WEBSITE DATA AND REMOVE DUPLICATES ---
       auditReport.emailsFound = [...new Set([...(lead.Emails || []), ...websiteContactData.emails])];
       auditReport.socialLinks = [...new Set([...(lead.SocialLinks || []), ...websiteContactData.socials])];
-
 
       // Mobile Responsiveness Check
       auditReport.isMobileOptimized = false; 
@@ -95,11 +114,6 @@ const fs = require('fs');
       else if (htmlCode.includes('wix.com')) auditReport.techStack = 'Wix';
       else if (htmlCode.includes('react') || htmlCode.includes('_next')) auditReport.techStack = 'React / Next.js';
 
-      // WhatsApp Integration Check
-      if (htmlCode.includes('wa.me') || htmlCode.includes('api.whatsapp.com') || htmlCode.includes('whatsapp')) {
-        auditReport.hasWhatsApp = true;
-      }
-
       // Basic SEO Checks
       const h1Count = await page.locator('h1').count();
       auditReport.hasH1 = h1Count > 0;
@@ -114,25 +128,26 @@ const fs = require('fs');
 
       // CALCULATE FLAW SCORE
       if (auditReport.isMobileOptimized === false) auditReport.flawScore += 50; 
-      if (auditReport.hasWhatsApp === true) auditReport.flawScore += 30; 
+      if (auditReport.hasWhatsAppCheckout === true) auditReport.flawScore += 30; 
       if (auditReport.hasSSL === false) auditReport.flawScore += 40; 
       if (auditReport.hasH1 === false) auditReport.flawScore += 5;
       if (auditReport.hasMetaDescription === false) auditReport.flawScore += 5;
       if (auditReport.unoptimizedImages > 10) auditReport.flawScore += 10;
 
-      console.log(`    🔒 SSL Security:     ${auditReport.hasSSL ? '✅ Secure (HTTPS)' : '❌ INSECURE (HTTP)'}`);
-      console.log(`    📱 Mobile Optimized: ${auditReport.isMobileOptimized ? '✅ Yes' : '❌ NO'}`);
-      console.log(`    💬 WhatsApp Button:  ${auditReport.hasWhatsApp ? '✅ Yes' : '❌ NO'}`);
-      console.log(`    📧 Emails Scraped:   ${auditReport.emailsFound.length > 0 ? auditReport.emailsFound.join(', ') : 'None'}`);
-      console.log(`    🌐 Social Links:     ${auditReport.socialLinks.length > 0 ? auditReport.socialLinks.length + ' Profile(s) Found' : 'None'}`);
-      console.log(`    ⚙️  Tech Stack:      ${auditReport.techStack}`);
+      console.log(`    🔒 SSL Security:      ${auditReport.hasSSL ? '✅ Secure (HTTPS)' : '❌ INSECURE (HTTP)'}`);
+      console.log(`    📱 Mobile Optimized:  ${auditReport.isMobileOptimized ? '✅ Yes' : '❌ NO'}`);
+      console.log(`    🛍️  WhatsApp Checkout: ${auditReport.hasWhatsAppCheckout ? '✅ YES (Target Brand)' : '❌ No'}`);
+      console.log(`    📧 Emails Scraped:    ${auditReport.emailsFound.length > 0 ? auditReport.emailsFound.join(', ') : 'None'}`);
+      console.log(`    🌐 Social Links:      ${auditReport.socialLinks.length > 0 ? auditReport.socialLinks.length + ' Profile(s) Found' : 'None'}`);
+      console.log(`    ⚙️  Tech Stack:       ${auditReport.techStack}`);
 
     } catch (error) {
       auditReport.status = "Failed to load / Severe Bot Protection";
       console.log(`    ⚠️ Could not load website (Severe Bot Protection or Dead Link).`);
     }
 
-    const isTargetLead = (auditReport.isMobileOptimized === false) || (auditReport.hasWhatsApp === true) || (auditReport.hasSSL === false);
+    // Target leads that are broken on mobile, missing real SSL, OR using a raw WhatsApp checkout setup
+    const isTargetLead = (auditReport.isMobileOptimized === false) || (auditReport.hasWhatsAppCheckout === true) || (auditReport.hasSSL === false);
 
     if (isTargetLead && auditReport.status !== "Failed to load / Severe Bot Protection") {
         console.log(`    🎯 LEAD QUALIFIED (Score: ${auditReport.flawScore}) - Adding to final list.`);
