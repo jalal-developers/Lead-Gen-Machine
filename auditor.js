@@ -1,5 +1,6 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
+const path = require('path');
 
 (async () => {
   console.log("Loading leads from needs_redesign.json...");
@@ -7,6 +8,12 @@ const fs = require('fs');
   const leads = JSON.parse(rawData);
   
   const qualifiedLeads = []; 
+
+  // --- NEW: SETUP SCREENSHOT DIRECTORY ---
+  const SCREENSHOT_DIR = path.join(__dirname, 'screenshots');
+  if (!fs.existsSync(SCREENSHOT_DIR)) {
+      fs.mkdirSync(SCREENSHOT_DIR);
+  }
 
   const browser = await chromium.launch({ headless: false });
   const context = await browser.newContext({
@@ -17,7 +24,7 @@ const fs = require('fs');
   
   const page = await context.newPage();
 
-  console.log(`\n=== Starting Smart Lead Scoring & Contact Audit ===\n`);
+  console.log(`\n=== Starting Smart Lead Scoring, Contact Audit & Visual Capture ===\n`);
 
   for (let i = 0; i < leads.length; i++) {
     const lead = leads[i];
@@ -33,32 +40,30 @@ const fs = require('fs');
     let auditReport = {
       isMobileOptimized: "Unknown", 
       techStack: "Custom/Unknown",
-      hasWhatsAppCheckout: false, // UPGRADED: Explicitly checking for eCom checkout
+      hasWhatsAppCheckout: false, 
       hasH1: false,
       hasMetaDescription: false,
       unoptimizedImages: 0,
       hasSSL: true, 
       emailsFound: [],      
-      socialLinks: [],      
+      socialLinks: [],   
+      screenshotPath: "None", // NEW: Track the image location   
       status: "Successfully Scanned",
       flawScore: 0
     };
 
     try {
       await page.waitForTimeout(Math.floor(Math.random() * 2000) + 1000); 
-      await page.goto(lead.Website, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      
+      const finalDestinationUrl = await page.goto(lead.Website, { waitUntil: 'domcontentloaded', timeout: 45000 });
       await page.waitForTimeout(4000); 
 
-      // --- FIXED: SSL CHECK VIA FINAL DESTINATION PROTOCOL ---
-      // Instead of reading the raw text link, we check where the browser actually landed
-      const finalDestinationUrl = page.url().toLowerCase();
-      if (finalDestinationUrl.startsWith('https://')) {
+      if (page.url().toLowerCase().startsWith('https://')) {
           auditReport.hasSSL = true;
       } else {
-          auditReport.hasSSL = false; // Truly insecure if it stayed on http://
+          auditReport.hasSSL = false; 
       }
 
-      // --- UPGRADED: TARGETED WHATSAPP CHECKOUT DETECTION ---
       auditReport.hasWhatsAppCheckout = await page.evaluate(() => {
         const actionableElements = Array.from(document.querySelectorAll('a, button, form, span'));
         const checkoutKeywords = ['order', 'buy', 'checkout', 'cart', 'خرید', 'آرڈر'];
@@ -74,7 +79,6 @@ const fs = require('fs');
         });
       });
 
-      // Extract Contact Data
       const websiteContactData = await page.evaluate(() => {
         const text = document.body.innerText;
         const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
@@ -99,7 +103,6 @@ const fs = require('fs');
       auditReport.emailsFound = [...new Set([...(lead.Emails || []), ...websiteContactData.emails])];
       auditReport.socialLinks = [...new Set([...(lead.SocialLinks || []), ...websiteContactData.socials])];
 
-      // Mobile Responsiveness Check
       auditReport.isMobileOptimized = false; 
       const viewport = await page.$('meta[name="viewport"]');
       if (viewport) {
@@ -107,26 +110,22 @@ const fs = require('fs');
         if (content && content.includes('width=device-width')) auditReport.isMobileOptimized = true;
       }
 
-      // Tech Stack Detection
       const htmlCode = await page.content();
       if (htmlCode.includes('wp-content') || htmlCode.includes('wordpress')) auditReport.techStack = 'WordPress';
       else if (htmlCode.includes('cdn.shopify.com') || htmlCode.includes('Shopify')) auditReport.techStack = 'Shopify';
       else if (htmlCode.includes('wix.com')) auditReport.techStack = 'Wix';
       else if (htmlCode.includes('react') || htmlCode.includes('_next')) auditReport.techStack = 'React / Next.js';
 
-      // Basic SEO Checks
       const h1Count = await page.locator('h1').count();
       auditReport.hasH1 = h1Count > 0;
       const metaDesc = await page.$('meta[name="description"]');
       auditReport.hasMetaDescription = metaDesc !== null;
 
-      // Performance Check
       auditReport.unoptimizedImages = await page.evaluate(() => {
           const imgs = Array.from(document.querySelectorAll('img'));
           return imgs.filter(img => !img.hasAttribute('loading') || img.getAttribute('loading') !== 'lazy').length;
       });
 
-      // CALCULATE FLAW SCORE
       if (auditReport.isMobileOptimized === false) auditReport.flawScore += 50; 
       if (auditReport.hasWhatsAppCheckout === true) auditReport.flawScore += 30; 
       if (auditReport.hasSSL === false) auditReport.flawScore += 40; 
@@ -134,26 +133,35 @@ const fs = require('fs');
       if (auditReport.hasMetaDescription === false) auditReport.flawScore += 5;
       if (auditReport.unoptimizedImages > 10) auditReport.flawScore += 10;
 
+      const isTargetLead = (auditReport.isMobileOptimized === false) || (auditReport.hasWhatsAppCheckout === true) || (auditReport.hasSSL === false);
+
+      if (isTargetLead) {
+          // --- NEW: TAKE A SCREENSHOT OF THE TARGET LEAD ---
+          // Format the company name so it saves as a clean file name without weird characters
+          const safeFileName = lead.Company.replace(/[^a-zA-Z0-9]/g, '_');
+          const imagePath = `screenshots/${safeFileName}.png`;
+          
+          await page.screenshot({ path: imagePath });
+          auditReport.screenshotPath = imagePath; // Save the path into the JSON data
+          
+          console.log(`    📸 Visual Evidence Captured: ${imagePath}`);
+      }
+
       console.log(`    🔒 SSL Security:      ${auditReport.hasSSL ? '✅ Secure (HTTPS)' : '❌ INSECURE (HTTP)'}`);
       console.log(`    📱 Mobile Optimized:  ${auditReport.isMobileOptimized ? '✅ Yes' : '❌ NO'}`);
-      console.log(`    🛍️  WhatsApp Checkout: ${auditReport.hasWhatsAppCheckout ? '✅ YES (Target Brand)' : '❌ No'}`);
-      console.log(`    📧 Emails Scraped:    ${auditReport.emailsFound.length > 0 ? auditReport.emailsFound.join(', ') : 'None'}`);
-      console.log(`    🌐 Social Links:      ${auditReport.socialLinks.length > 0 ? auditReport.socialLinks.length + ' Profile(s) Found' : 'None'}`);
+      console.log(`    🛍️  WhatsApp Checkout: ${auditReport.hasWhatsAppCheckout ? '✅ YES' : '❌ No'}`);
       console.log(`    ⚙️  Tech Stack:       ${auditReport.techStack}`);
+
+      if (isTargetLead) {
+          console.log(`    🎯 LEAD QUALIFIED (Score: ${auditReport.flawScore}) - Adding to final list.`);
+          qualifiedLeads.push({ ...lead, Audit: auditReport });
+      } else {
+          console.log(`    🚫 Passed Audit (No critical flaws). Ignoring and deleting from list.`);
+      }
 
     } catch (error) {
       auditReport.status = "Failed to load / Severe Bot Protection";
       console.log(`    ⚠️ Could not load website (Severe Bot Protection or Dead Link).`);
-    }
-
-    // Target leads that are broken on mobile, missing real SSL, OR using a raw WhatsApp checkout setup
-    const isTargetLead = (auditReport.isMobileOptimized === false) || (auditReport.hasWhatsAppCheckout === true) || (auditReport.hasSSL === false);
-
-    if (isTargetLead && auditReport.status !== "Failed to load / Severe Bot Protection") {
-        console.log(`    🎯 LEAD QUALIFIED (Score: ${auditReport.flawScore}) - Adding to final list.`);
-        qualifiedLeads.push({ ...lead, Audit: auditReport });
-    } else if (auditReport.status === "Successfully Scanned") {
-        console.log(`    🚫 Passed Audit (No critical flaws). Ignoring and deleting from list.`);
     }
   }
 
