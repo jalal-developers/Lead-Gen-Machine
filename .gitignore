@@ -3,6 +3,7 @@ node_modules/
 
 # Ignore all lead data folders and JSON files
 leads/
+screenshots/
 leads.json
 needs_redesign.json
 needs_new_website.json
