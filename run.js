@@ -4,7 +4,7 @@ const fs = require('fs');
 console.log("🚀 STARTING THE CLOUD LEAD GENERATION MACHINE...\n");
 
 // CHANGE THIS to whatever niche/city you want to scrape today!
-const TARGET_QUERY = "Beauty Salon in Lahore"; 
+const TARGET_QUERY = "Beauty Salon in Karachi"; 
 
 try {
   console.log(`\n▶️ STEP 1: Running Google Maps Crawler for: "${TARGET_QUERY}"...`);
