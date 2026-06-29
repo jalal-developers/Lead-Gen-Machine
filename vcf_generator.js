@@ -1,4 +1,3 @@
-// --- NEW: UNLOCK THE SECRETS VAULT ---
 require('dotenv').config();
 const fs = require('fs');
 
@@ -37,42 +36,61 @@ fs.writeFileSync('bulk_leads.vcf', vcfContent);
 console.log(`✅ Successfully packed ${savedCount} contacts into bulk_leads.vcf!`);
 
 // --- SECURE TELEGRAM PIPELINE ---
-// Now it pulls the keys securely from your .env file!
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-async function sendToPhone() {
+async function sendToTelegram() {
     if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
         console.error("❌ Error: Telegram credentials are missing from your .env file!");
         return;
     }
 
-    console.log("\n🚀 Beaming file directly to your phone via Telegram...");
+    console.log("\n🚀 Beaming files directly to your phone via Telegram...");
     
+    // 1. Send the VCF File
     try {
-        const fileBuffer = fs.readFileSync('bulk_leads.vcf');
-        const blob = new Blob([fileBuffer], { type: 'text/vcard' });
+        const vcfBuffer = fs.readFileSync('bulk_leads.vcf');
+        const vcfBlob = new Blob([vcfBuffer], { type: 'text/vcard' });
         
-        const formData = new FormData();
-        formData.append('chat_id', TELEGRAM_CHAT_ID);
-        formData.append('document', blob, 'Daily_Leads.vcf');
-        formData.append('caption', `✅ Fresh leads generated! Tap the file above to save ${savedCount} contacts to your phone.`);
+        const vcfFormData = new FormData();
+        vcfFormData.append('chat_id', TELEGRAM_CHAT_ID);
+        vcfFormData.append('document', vcfBlob, 'Daily_Leads.vcf');
+        vcfFormData.append('caption', `✅ Fresh leads generated! Tap to save ${savedCount} contacts.`);
 
-        const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`, {
+        console.log("📤 Sending VCF Contacts...");
+        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`, {
             method: 'POST',
-            body: formData
+            body: vcfFormData
         });
+        console.log(`✅ Contacts delivered!`);
+    } catch (error) {
+        console.error("❌ Failed to send VCF:", error.message);
+    }
 
-        const result = await response.json();
-        
-        if (result.ok) {
-            console.log(`✅ SUCCESS! Check your Telegram app right now.`);
+    // 2. Send the Excel CRM File
+    try {
+        if (fs.existsSync('leads_crm.xlsx')) {
+            const excelBuffer = fs.readFileSync('leads_crm.xlsx');
+            // Standard MIME type for Excel files
+            const excelBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            
+            const excelFormData = new FormData();
+            excelFormData.append('chat_id', TELEGRAM_CHAT_ID);
+            excelFormData.append('document', excelBlob, 'leads_crm.xlsx');
+            excelFormData.append('caption', `📊 Here is your Daily CRM Dashboard!`);
+
+            console.log("📤 Sending Excel CRM...");
+            await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`, {
+                method: 'POST',
+                body: excelFormData
+            });
+            console.log(`✅ Excel CRM delivered!`);
         } else {
-            console.error(`❌ Telegram failed:`, result.description);
+            console.log("⚠️ leads_crm.xlsx not found. Skipping Excel upload.");
         }
     } catch (error) {
-        console.error("❌ Network Error:", error.message);
+        console.error("❌ Failed to send Excel file:", error.message);
     }
 }
 
-sendToPhone();
+sendToTelegram();
