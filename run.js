@@ -25,7 +25,7 @@ try {
   console.log("\n🧹 STEP 5: Cleaning up temporary files...");
   if (fs.existsSync('leads.json')) fs.unlinkSync('leads.json');
   if (fs.existsSync('needs_redesign.json')) fs.unlinkSync('needs_redesign.json');
-  if (fs.existsSync('qualified_leads.json')) fs.unlinkSync('qualified_leads.json');
+ // if (fs.existsSync('qualified_leads.json')) fs.unlinkSync('qualified_leads.json');
 
   console.log("\n✅ ALL DONE! Your machine has finished running.");
 
