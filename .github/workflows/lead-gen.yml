@@ -1,7 +1,5 @@
 name: Nightly Lead Generation
 
-# This tells GitHub to run this script automatically at midnight UTC every day.
-# You can also click a button to run it manually (workflow_dispatch).
 on:
   schedule:
     - cron: '0 0 * * *'
@@ -26,10 +24,16 @@ jobs:
       - name: Install Playwright Browsers
         run: npx playwright install chromium
 
-      - name: Run Lead-Gen Machine
-        run: node run.js
+      - name: Run Lead-Gen Machine & Beam Contacts
+        # This securely injects your GitHub Secrets into the cloud server!
+        env:
+          HF_API_KEY: ${{ secrets.HF_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          node run.js
+          node vcf_generator.js
 
-      # This packages your Excel file and screenshots so you can download them!
       - name: Upload CRM and Screenshots
         uses: actions/upload-artifact@v4
         with:

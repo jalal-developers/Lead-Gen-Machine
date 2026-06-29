@@ -4,6 +4,7 @@ node_modules/
 # Ignore all lead data folders and JSON files
 leads/
 screenshots/
+drive-key.json
 leads_crm.xlsx
 .env
 leads.json
