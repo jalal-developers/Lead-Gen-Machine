@@ -3,12 +3,27 @@ const fs = require('fs');
 
 console.log("\n=== Building Bulk Contact File (VCF) ===");
 
-if (!fs.existsSync('qualified_leads.json')) {
-    console.log("❌ Error: qualified_leads.json not found.");
+let allLeads = [];
+
+// 1. Grab businesses that HAVE websites (Redesigns/Audits)
+if (fs.existsSync('qualified_leads.json')) {
+    const qualifiedLeads = JSON.parse(fs.readFileSync('qualified_leads.json'));
+    allLeads = allLeads.concat(qualifiedLeads);
+    console.log(`🔍 Found ${qualifiedLeads.length} leads that need a redesign/audit.`);
+}
+
+// 2. Grab businesses that DO NOT have websites (New Websites)
+if (fs.existsSync('needs_new_website.json')) {
+    const noWebsiteLeads = JSON.parse(fs.readFileSync('needs_new_website.json'));
+    allLeads = allLeads.concat(noWebsiteLeads);
+    console.log(`🔍 Found ${noWebsiteLeads.length} leads that need a brand new website.`);
+}
+
+if (allLeads.length === 0) {
+    console.log("❌ Error: No leads found in either JSON file.");
     process.exit(1);
 }
 
-const leads = JSON.parse(fs.readFileSync('qualified_leads.json'));
 let vcfContent = "";
 let savedCount = 0;
 
@@ -20,7 +35,8 @@ const cleanPhone = (phoneStr) => {
     return "+" + cleaned; 
 };
 
-leads.forEach(lead => {
+// 3. Process ALL leads into the VCF
+allLeads.forEach(lead => {
     const phone = cleanPhone(lead.Phone);
     if (phone) {
         vcfContent += "BEGIN:VCARD\nVERSION:3.0\n";
@@ -33,7 +49,7 @@ leads.forEach(lead => {
 });
 
 fs.writeFileSync('bulk_leads.vcf', vcfContent);
-console.log(`✅ Successfully packed ${savedCount} contacts into bulk_leads.vcf!`);
+console.log(`✅ Successfully packed a total of ${savedCount} contacts into bulk_leads.vcf!`);
 
 // --- SECURE TELEGRAM PIPELINE ---
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -47,7 +63,7 @@ async function sendToTelegram() {
 
     console.log("\n🚀 Beaming files directly to your phone via Telegram...");
     
-    // 1. Send the VCF File
+    // Send the VCF File
     try {
         const vcfBuffer = fs.readFileSync('bulk_leads.vcf');
         const vcfBlob = new Blob([vcfBuffer], { type: 'text/vcard' });
@@ -55,7 +71,7 @@ async function sendToTelegram() {
         const vcfFormData = new FormData();
         vcfFormData.append('chat_id', TELEGRAM_CHAT_ID);
         vcfFormData.append('document', vcfBlob, 'Daily_Leads.vcf');
-        vcfFormData.append('caption', `✅ Fresh leads generated! Tap to save ${savedCount} contacts.`);
+        vcfFormData.append('caption', `✅ Fresh leads generated! Tap to save ${savedCount} total contacts (Includes both Redesign & New Website leads).`);
 
         console.log("📤 Sending VCF Contacts...");
         await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`, {
@@ -67,11 +83,10 @@ async function sendToTelegram() {
         console.error("❌ Failed to send VCF:", error.message);
     }
 
-    // 2. Send the Excel CRM File
+    // Send the Excel CRM File
     try {
         if (fs.existsSync('leads_crm.xlsx')) {
             const excelBuffer = fs.readFileSync('leads_crm.xlsx');
-            // Standard MIME type for Excel files
             const excelBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
             
             const excelFormData = new FormData();
