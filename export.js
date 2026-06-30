@@ -12,6 +12,7 @@ console.log("\n=== Starting Native Excel CRM Export Phase ===");
         { header: 'Company Name', key: 'company', width: 30 },
         { header: 'Phone', key: 'phone', width: 18 },
         { header: 'Website', key: 'website', width: 30 },
+        { header: 'Google Maps Link', key: 'mapsLink', width: 40 },
         { header: 'Load Time', key: 'loadTime', width: 14 }, 
         
         { header: 'SSL Secure?', key: 'ssl', width: 15 },
@@ -23,6 +24,10 @@ console.log("\n=== Starting Native Excel CRM Export Phase ===");
         
         { header: 'Emails', key: 'emails', width: 35 },
         { header: 'Social Links', key: 'socials', width: 45 },
+        { header: 'Facebook?', key: 'facebook', width: 12 },
+        { header: 'Instagram?', key: 'instagram', width: 12 },
+        { header: 'LinkedIn?', key: 'linkedin', width: 12 },
+        { header: 'Social Links (JSON)', key: 'socialLinksJson', width: 30 },
         { header: 'WhatsApp 1-Click Link', key: 'waLink', width: 25 },
         { header: 'Pre-Written Pitch', key: 'pitch', width: 80 },
         { header: 'Screenshot Path', key: 'screenshot', width: 35 }
@@ -104,8 +109,16 @@ console.log("\n=== Starting Native Excel CRM Export Phase ===");
                 waLinkData = { text: '📲 Send Message', hyperlink: fullUrl };
             }
 
-            const emails = lead.Emails && lead.Emails.length > 0 ? lead.Emails.join(' | ') : 'None';
-            const socials = lead.SocialLinks && lead.SocialLinks.length > 0 ? lead.SocialLinks.join(' | ') : 'None';
+            const emailsList = lead.Audit && lead.Audit.emailsFound ? lead.Audit.emailsFound : (lead.Emails || []);
+            const emails = emailsList.length > 0 ? emailsList.join(' | ') : 'None';
+
+            const socialsList = lead.Audit && lead.Audit.socialLinks ? lead.Audit.socialLinks : (lead.SocialLinks || []);
+            const socials = socialsList.length > 0 ? socialsList.join(' | ') : 'None';
+
+            const facebook = lead.Facebook || 'No';
+            const instagram = lead.Instagram || 'No';
+            const linkedin = lead.LinkedIn || 'No';
+            const socialLinksJson = lead.Social_Links || 'None';
             const screenshot = lead.Audit && lead.Audit.screenshotPath ? lead.Audit.screenshotPath : 'None';
 
             const row = worksheet.addRow({
@@ -113,6 +126,7 @@ console.log("\n=== Starting Native Excel CRM Export Phase ===");
                 company: lead.Company,
                 phone: lead.Phone,
                 website: lead.Website,
+                mapsLink: lead.MapsLink || 'None',
                 loadTime: speedMetric,
                 ssl: sslStatus,
                 mobile: mobileStatus,
@@ -122,6 +136,10 @@ console.log("\n=== Starting Native Excel CRM Export Phase ===");
                 flawScore: scoreMetric,
                 emails: emails,
                 socials: socials,
+                facebook: facebook,
+                instagram: instagram,
+                linkedin: linkedin,
+                socialLinksJson: socialLinksJson,
                 waLink: waLinkData,
                 pitch: customPitch,
                 screenshot: screenshot

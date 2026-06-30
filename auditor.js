@@ -144,17 +144,37 @@ const apiKey = process.env.HF_API_KEY;
       const websiteContactData = await page.evaluate(() => {
         const text = document.body.innerText;
         const emails = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-        const socials = [];
         Array.from(document.querySelectorAll('a')).forEach(a => {
           const href = a.href.toLowerCase();
           if (href.startsWith('mailto:')) emails.push(href.replace('mailto:', '').split('?')[0]); 
-          if (href.includes('instagram.com') || href.includes('facebook.com') || href.includes('tiktok.com')) socials.push(a.href);
         });
-        return { emails, socials };
+        return { emails };
       });
 
       auditReport.emailsFound = [...new Set([...(lead.Emails || []), ...websiteContactData.emails])];
-      auditReport.socialLinks = [...new Set([...(lead.SocialLinks || []), ...websiteContactData.socials])];
+
+      // --- DEEP SWEEP SOCIAL MEDIA EXTRACTION ---
+      const socialData = await page.evaluate(() => {
+          // Grab every single <a> tag on the entire website
+          const allLinks = Array.from(document.querySelectorAll('a[href]')).map(a => a.href.toLowerCase());
+          
+          // Search the raw URLs for social domains
+          const facebook = allLinks.find(link => link.includes('facebook.com')) || 'None';
+          const instagram = allLinks.find(link => link.includes('instagram.com')) || 'None';
+          const linkedin = allLinks.find(link => link.includes('linkedin.com')) || 'None';
+          const tiktok = allLinks.find(link => link.includes('tiktok.com')) || 'None';
+          
+          return { facebook, instagram, linkedin, tiktok };
+      });
+
+      // Add this to your lead object
+      lead.Facebook = socialData.facebook !== 'None' ? 'Yes' : 'No';
+      lead.Instagram = socialData.instagram !== 'None' ? 'Yes' : 'No';
+      lead.LinkedIn = socialData.linkedin !== 'None' ? 'Yes' : 'No';
+      lead.Social_Links = JSON.stringify(socialData); // Saves the actual URLs if you need them
+
+      const activeSocials = Object.values(socialData).filter(url => url !== 'None');
+      auditReport.socialLinks = [...new Set([...(lead.SocialLinks || []), ...activeSocials])];
 
       auditReport.isMobileOptimized = false; 
       const viewport = await page.$('meta[name="viewport"]');
