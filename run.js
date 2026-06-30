@@ -3,8 +3,24 @@ const fs = require('fs');
 
 console.log("🚀 STARTING THE CLOUD LEAD GENERATION MACHINE...\n");
 
-// CHANGE THIS to whatever niche/city you want to scrape today!
-const TARGET_QUERY = "Beauty Salon in Karachi"; 
+// Lists of categories and major Pakistani cities for random search query generation
+const categories = [
+  "Beauty Salon", "Plumber", "Electrician", "Real Estate Agency",
+  "Dentist", "Restaurant", "Car Rental", "Gym", "Coffee Shop",
+  "Boutique", "Event Planner", "Travel Agency", "Interior Designer",
+  "Law Firm", "Accounting Firm", "Spa", "Fitness Center"
+];
+
+const cities = [
+  "Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad",
+  "Multan", "Peshawar", "Quetta", "Gujranwala", "Sialkot"
+];
+
+// Pick a random category and city
+const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+const randomCity = cities[Math.floor(Math.random() * cities.length)];
+
+const TARGET_QUERY = `${randomCategory} in ${randomCity}`;
 
 try {
   console.log(`\n▶️ STEP 1: Running Google Maps Crawler for: "${TARGET_QUERY}"...`);

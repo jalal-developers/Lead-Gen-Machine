@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1782817765538" clover="3.2.0">
-  <project timestamp="1782817765538" name="All files">
+<coverage generated="1782822688547" clover="3.2.0">
+  <project timestamp="1782822688547" name="All files">
     <metrics statements="16" coveredstatements="10" conditionals="4" coveredconditionals="3" methods="2" coveredmethods="2" elements="22" coveredelements="15" complexity="0" loc="16" ncloc="16" packages="1" files="1" classes="1"/>
     <file name="filter.js" path="C:\Users\jalal\source\repos\My-Projects\JavaScript Projects\Lead-Gen-Machine\filter.js">
       <metrics statements="16" coveredstatements="10" conditionals="4" coveredconditionals="3" methods="2" coveredmethods="2"/>

@@ -31,9 +31,14 @@ const apiKey = process.env.HF_API_KEY;
 
   console.log(`\n=== Starting AI-Powered Audit & Profiling ===\n`);
   
-  if (!apiKey) {
-      console.log("⚠️  CRITICAL WARNING: HF_API_KEY is missing from your .env file!");
-      console.log("⚠️  The bot will skip AI personalization and use the fallback message.\n");
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const hfKey = process.env.HF_API_KEY;
+
+  if (!geminiKey && !hfKey) {
+      console.log("💡 Note: No API keys (GEMINI_API_KEY or HF_API_KEY) found in your .env file.");
+      console.log("💡 The bot will use the free, keyless Pollinations AI API for personalization.\n");
+  } else {
+      console.log(`💡 AI configured with: ${geminiKey ? 'Gemini' : ''}${geminiKey && hfKey ? ' & ' : ''}${hfKey ? 'Hugging Face' : ''}\n`);
   }
 
   for (let i = 0; i < leads.length; i++) {
@@ -84,44 +89,103 @@ const apiKey = process.env.HF_API_KEY;
           return document.body.innerText.substring(0, 400).replace(/\n/g, ' '); 
       });
 
-      if (apiKey && websiteTextSnippet.length > 10) {
+      if (websiteTextSnippet.length > 10) {
           let aiSuccess = false;
-          let attempts = 0;
           const prompt = `You are a friendly web developer sending a cold text to a local business called ${lead.Company}. Write a short, casual, one-sentence compliment (under 12 words) about their business based on this text from their website: "${websiteTextSnippet}". Do not use hashtags, quotes, or robotic language. Sound like a normal human.`;
 
-          console.log(`    ⏳ Sending text to Hugging Face AI...`);
-
-          while (attempts < 3 && !aiSuccess) {
+          // 1. Try Gemini
+          if (geminiKey) {
+              console.log(`    ⏳ Trying Gemini AI...`);
               try {
                   const response = await fetch(
-                      "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
+                      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
                       {
-                          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
                           method: "POST",
+                          headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({
-                              inputs: `[INST] ${prompt} [/INST]`,
-                              parameters: { max_new_tokens: 30, return_full_text: false, temperature: 0.7 }
-                          }),
+                              contents: [{ parts: [{ text: prompt }] }],
+                              generationConfig: { maxOutputTokens: 30, temperature: 0.7 }
+                          })
                       }
                   );
-                  const result = await response.json();
-                  if (result.error && result.estimated_time) {
-                      const waitTime = Math.ceil(result.estimated_time) + 2; 
-                      console.log(`    💤 AI is asleep. Waiting ${waitTime} seconds...`);
-                      await page.waitForTimeout(waitTime * 1000);
-                      attempts++;
-                  } else if (result && result[0] && result[0].generated_text) {
-                      let rawCompliment = result[0].generated_text.trim();
-                      auditReport.aiCompliment = rawCompliment.replace(/^["']|["']$/g, '');
-                      console.log(`    🧠 AI Generated Pitch: "${auditReport.aiCompliment}"`);
-                      aiSuccess = true;
+                  if (response.ok) {
+                      const result = await response.json();
+                      if (result.candidates && result.candidates[0]?.content?.parts?.[0]?.text) {
+                          let rawCompliment = result.candidates[0].content.parts[0].text.trim();
+                          auditReport.aiCompliment = rawCompliment.replace(/^["']|["']$/g, '');
+                          console.log(`    🧠 Gemini Generated Pitch: "${auditReport.aiCompliment}"`);
+                          aiSuccess = true;
+                      }
                   } else {
-                     console.log(`    ⚠️ AI returned empty, using fallback.`);
-                     break;
+                      console.log(`    ⚠️ Gemini API returned status ${response.status}`);
                   }
-              } catch (error) {
-                  console.log(`    ⚠️ AI request failed, using fallback.`);
-                  break;
+              } catch (e) {
+                  console.log(`    ⚠️ Gemini API call failed: ${e.message}`);
+              }
+          }
+
+          // 2. Try Hugging Face
+          if (!aiSuccess && hfKey) {
+              console.log(`    ⏳ Trying Hugging Face AI...`);
+              let attempts = 0;
+              while (attempts < 2 && !aiSuccess) {
+                  try {
+                      const response = await fetch(
+                          "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
+                          {
+                              headers: { Authorization: `Bearer ${hfKey}`, "Content-Type": "application/json" },
+                              method: "POST",
+                              body: JSON.stringify({
+                                  inputs: `[INST] ${prompt} [/INST]`,
+                                  parameters: { max_new_tokens: 30, return_full_text: false, temperature: 0.7 }
+                              }),
+                          }
+                      );
+                      const result = await response.json();
+                      if (result.error && result.estimated_time) {
+                          const waitTime = Math.ceil(result.estimated_time) + 2; 
+                          console.log(`    💤 HF AI is asleep. Waiting ${waitTime} seconds...`);
+                          await page.waitForTimeout(waitTime * 1000);
+                          attempts++;
+                      } else if (result && result[0] && result[0].generated_text) {
+                          let rawCompliment = result[0].generated_text.trim();
+                          auditReport.aiCompliment = rawCompliment.replace(/^["']|["']$/g, '');
+                          console.log(`    🧠 HF AI Generated Pitch: "${auditReport.aiCompliment}"`);
+                          aiSuccess = true;
+                      } else {
+                          break;
+                      }
+                  } catch (e) {
+                      console.log(`    ⚠️ Hugging Face API call failed: ${e.message}`);
+                      break; 
+                  }
+              }
+          }
+
+          // 3. Fallback to Pollinations AI (Keyless Free API)
+          if (!aiSuccess) {
+              console.log(`    ⏳ Trying Pollinations AI (Keyless Free API)...`);
+              try {
+                  const response = await fetch("https://text.pollinations.ai/", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                          messages: [{ role: "user", content: prompt }],
+                          model: "openai"
+                      })
+                  });
+                  if (response.ok) {
+                      const text = await response.text();
+                      if (text && text.trim().length > 0) {
+                          auditReport.aiCompliment = text.trim().replace(/^["']|["']$/g, '');
+                          console.log(`    🧠 Pollinations Generated Pitch: "${auditReport.aiCompliment}"`);
+                          aiSuccess = true;
+                      }
+                  } else {
+                      console.log(`    ⚠️ Pollinations API returned status ${response.status}`);
+                  }
+              } catch (e) {
+                  console.log(`    ⚠️ Pollinations API call failed: ${e.message}`);
               }
           }
       }

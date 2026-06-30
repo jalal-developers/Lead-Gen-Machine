@@ -72,6 +72,8 @@ const fs = require('fs');
         if (ariaLabel) phone = ariaLabel.replace('Phone number: ', '').trim();
       }
 
+      const mapsLink = page.url(); // Grabs the exact Google Maps URL for this specific business
+
       // --- DEEP LINK EXTRACTION FROM WEB RESULTS PANE ---
       const mapsContactData = await page.evaluate(() => {
         const anchors = Array.from(document.querySelectorAll('a'));
@@ -112,7 +114,8 @@ const fs = require('fs');
           Website: website, 
           Emails: mapsContactData.emails, 
           SocialLinks: mapsContactData.socials,
-          MapsLink: lead.url 
+          MapsLink: lead.url,
+          Maps_Link: mapsLink
       });
       
     } catch (error) {

@@ -121,12 +121,18 @@ console.log("\n=== Starting Native Excel CRM Export Phase ===");
             const socialLinksJson = lead.Social_Links || 'None';
             const screenshot = lead.Audit && lead.Audit.screenshotPath ? lead.Audit.screenshotPath : 'None';
 
+            const mapsLinkVal = lead.Maps_Link || lead.MapsLink;
+            let mapsLinkData = "None";
+            if (mapsLinkVal && mapsLinkVal !== "None") {
+                mapsLinkData = { text: mapsLinkVal, hyperlink: mapsLinkVal };
+            }
+
             const row = worksheet.addRow({
                 category: category,
                 company: lead.Company,
                 phone: lead.Phone,
                 website: lead.Website,
-                mapsLink: lead.MapsLink || 'None',
+                mapsLink: mapsLinkData,
                 loadTime: speedMetric,
                 ssl: sslStatus,
                 mobile: mobileStatus,
@@ -147,6 +153,10 @@ console.log("\n=== Starting Native Excel CRM Export Phase ===");
 
             if (phoneClean) {
                 row.getCell('waLink').font = { color: { argb: 'FF0563C1' }, underline: true };
+            }
+
+            if (mapsLinkVal && mapsLinkVal !== "None") {
+                row.getCell('mapsLink').font = { color: { argb: 'FF0563C1' }, underline: true };
             }
         });
     };
