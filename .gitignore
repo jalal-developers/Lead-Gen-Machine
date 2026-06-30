@@ -5,6 +5,7 @@ node_modules/
 leads/
 screenshots/
 drive-key.json
+bulk_leads.vcf
 leads_crm.xlsx
 .env
 leads.json
